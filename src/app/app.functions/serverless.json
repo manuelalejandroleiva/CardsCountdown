@@ -1,0 +1,13 @@
+{
+  "appFunctions": {
+    "sla": {
+      "file": "sla.js",
+      "secrets": []
+    },
+   
+    "myFunc": {
+      "file": "example-function.js",
+      "secrets": []
+    }
+  }
+}

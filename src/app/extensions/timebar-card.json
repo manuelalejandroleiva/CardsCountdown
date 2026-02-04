@@ -1,0 +1,12 @@
+{
+  "type": "crm-card",
+  "data": {
+    "title": "TimebarCard",
+    "uid": "get_time_card",
+    "location": "crm.record.tab",
+    "module": {
+      "file": "TimebarCard.tsx"
+    },
+    "objectTypes": [{ "name": "tickets" }]
+  }
+}

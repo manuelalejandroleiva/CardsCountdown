@@ -62,6 +62,24 @@ const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
     }
   }, [objectId, runServerlessFunction]);
 
+
+  const tick = () => {
+    const remaining = fechaFinal ? fechaFinal - Date.now() : 0;
+    setTimeRemaining(Math.max(0, remaining));
+
+    // Actualizar porcentaje de la barra
+    if (initialRemainingRef.current > 0) {
+      const percentage = Math.min(
+        100,
+        Math.max(0, ((initialRemainingRef.current - remaining) / initialRemainingRef.current) * 100)
+      );
+      setProgress(percentage);
+    }
+
+    requestAnimationFrame(tick);
+  };
+  
+
   // --- Refrescar SLA cada 10 minutos ---
   useEffect(() => {
     obtenerSLA();
@@ -70,25 +88,10 @@ const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
   }, [obtenerSLA]);
 
   // --- Countdown + barra animada ---
+
+  
   useEffect(() => {
     if (!fechaFinal) return;
-
-    const tick = () => {
-      const remaining = fechaFinal - Date.now();
-      setTimeRemaining(Math.max(0, remaining));
-
-      // Actualizar porcentaje de la barra
-      if (initialRemainingRef.current > 0) {
-        const percentage = Math.min(
-          100,
-          Math.max(0, ((initialRemainingRef.current - remaining) / initialRemainingRef.current) * 100)
-        );
-        setProgress(percentage);
-      }
-
-      requestAnimationFrame(tick);
-    };
-
     tick();
   }, [fechaFinal]);
 
@@ -99,15 +102,15 @@ const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
     hoursRemaining > 8
       ? "success"
       : hoursRemaining > 0 && hoursRemaining <= 1
-      ? "danger"
-      : "warning";
+      ? "warning"
+      : "danger";
 
   const estadoTexto =
     hoursRemaining > 8
       ? "A tiempo"
       : hoursRemaining > 0 && hoursRemaining <= 1
-      ? "Retrasado"
-      : "En Riesgo";
+      ? "En Riesgo"
+      : "Retrasado";
 
   // --- Formatear tiempo restante HH:MM:SS ---
   const formatTime = (ms: number) => {
@@ -120,20 +123,20 @@ const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
 
   return (
     <Flex direction="column" gap="md">
-      <Heading>Deal Time Progress</Heading>
-
-      <Text>{consumidoTime?.toFixed(1)} horas consumidas</Text>
-
      
 
       <Flex align="center" gap="medium">
-        <Text variant="microcopy">Tiempo restante:</Text>
+        <Text variant="bodytext">Tiempo restante:</Text>
 
-        <Text format={{ fontWeight: "bold" }}>
-          {timeRemaining > 0 ? formatTime(timeRemaining) : "Plazo vencido"}
-        </Text>
+        <Heading >
+      {timeRemaining > 0 ? formatTime(timeRemaining) : "Plazo vencido"}
+  
+      </Heading>
+    <Heading>
+    <StatusTag variant={estado}>{estadoTexto}</StatusTag>
+    </Heading>
 
-        <StatusTag variant={estado}>{estadoTexto}</StatusTag>
+       
       </Flex>
     </Flex>
   );

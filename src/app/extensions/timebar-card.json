@@ -1,7 +1,7 @@
 {
   "type": "crm-card",
   "data": {
-    "title": "TimebarCard",
+    "title": "SLA Time tracking",
     "uid": "get_time_card",
     "location": "crm.record.tab",
     "module": {

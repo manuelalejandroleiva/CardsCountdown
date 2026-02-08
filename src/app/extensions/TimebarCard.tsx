@@ -1,13 +1,9 @@
-import React, { useCallback, useState, useEffect, useRef } from "react";
-import {
-  Heading,
-  Text,
-  Flex,
-  StatusTag,
-  ProgressBar,
-  hubspot
-} from "@hubspot/ui-extensions";
+import React, { useCallback, useEffect, useState } from "react";
+import { Heading, Text, Flex, StatusTag, hubspot } from "@hubspot/ui-extensions";
 
+/* ============================
+   HUBSPOT EXTENSION
+============================ */
 hubspot.extend(({ runServerlessFunction, context }) => (
   <TimebarCard
     runServerlessFunction={runServerlessFunction}
@@ -15,129 +11,166 @@ hubspot.extend(({ runServerlessFunction, context }) => (
   />
 ));
 
-const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
-  const [fechaFinal, setFechaFinal] = useState<number | null>(null);
-  const [consumidoTime, setConsumidoTime] = useState<number | null>(0);
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const [progress, setProgress] = useState<number>(0);
+/* ============================
+   TYPES
+============================ */
+type StageSLA = {
+  stageId: string;
+  stageName: string;
+  fechaFinal: number;
+  initialRemaining: number;
+  noSla?: boolean;
+};
 
-  const initialRemainingRef = useRef<number>(0); // tiempo total del countdown
+type SLAConfig = {
+  label: string;
+  dateField?: string;
+};
 
-  // --- Obtener SLA ---
-  const obtenerSLA = useCallback(async () => {
-    if (!objectId) return;
+/* ============================
+   SLA CONFIG (REUTILIZABLE)
+============================ */
+const SLA_CONFIG: Record<string, SLAConfig> = {
+  "1": {
+    label: "",
+    dateField: "tiempo_restante_sla"
+  },
+  "2": {
+    label: "",
+    dateField: "tiempo_restante_sla_2"
+  }
+};
+
+/* ============================
+   NORMALIZAR SLA
+============================ */
+const buildStageSla = (r: any): StageSLA | null => {
+  if (!r?.stage) return null;
+
+  const config = SLA_CONFIG[r.stage];
+
+  if (!config || !config.dateField || !r[config.dateField]) {
+    return {
+      stageId: r.stage,
+      stageName: "No existe SLA asignado",
+      fechaFinal: 0,
+      initialRemaining: 0,
+      noSla: true
+    };
+  }
+
+  const now = Date.now();
+  const fecha = new Date(r[config.dateField]).getTime();
+
+  return {
+    stageId: r.stage,
+    stageName: config.label,
+    fechaFinal: fecha,
+    initialRemaining: Math.max(0, fecha - now)
+  };
+};
+
+/* ============================
+   HOOK SLA (REUTILIZABLE)
+============================ */
+const useSLA = (
+  objectId: string | undefined,
+  runServerlessFunction: any
+) => {
+  const [stageSla, setStageSla] = useState<StageSLA | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchSLA = useCallback(async () => {
+    if (!objectId) {
+      setLoading(false);
+      return;
+    }
 
     try {
-      const res: any = await runServerlessFunction({
+      const res = await runServerlessFunction({
         name: "sla",
         parameters: { objectId }
       });
 
-      // Tiempo consumido
-      if (res.response?.tiempo_consumido_sla) {
-        const consumidoNumber = Number(res.response.tiempo_consumido_sla) / (1000 * 60 * 60);
-        setConsumidoTime(consumidoNumber);
-      }
-
-      // Fecha final SLA
-      let fecha: number | null = null;
-      if (res.response?.tiempo_restante_sla) {
-        fecha = new Date(res.response.tiempo_restante_sla).getTime();
-      } else if (res.response?.createdDate) {
-        const created = new Date(Number(res.response.createdDate));
-        created.setDate(created.getDate() + 30);
-        fecha = created.getTime();
-      }
-
-      if (fecha) {
-        setFechaFinal(fecha);
-        const remainingMs = fecha - Date.now();
-        initialRemainingRef.current = remainingMs; // guardamos tiempo total para el porcentaje
-        setTimeRemaining(Math.max(0, remainingMs));
-      }
-    } catch (err) {
-      console.error("Error obteniendo SLA:", err);
-      setFechaFinal(null);
-      setTimeRemaining(null);
+      setStageSla(buildStageSla(res?.response));
+    } catch (e) {
+      console.error("Error obteniendo SLA:", e);
+      setStageSla(null);
+    } finally {
+      setLoading(false);
     }
   }, [objectId, runServerlessFunction]);
 
-
-  const tick = () => {
-    const remaining = fechaFinal ? fechaFinal - Date.now() : 0;
-    setTimeRemaining(Math.max(0, remaining));
-
-    // Actualizar porcentaje de la barra
-    if (initialRemainingRef.current > 0) {
-      const percentage = Math.min(
-        100,
-        Math.max(0, ((initialRemainingRef.current - remaining) / initialRemainingRef.current) * 100)
-      );
-      setProgress(percentage);
-    }
-
-    requestAnimationFrame(tick);
-  };
-  
-
-  // --- Refrescar SLA cada 10 minutos ---
   useEffect(() => {
-    obtenerSLA();
-    const serverInterval = setInterval(obtenerSLA, 10 * 60 * 1000);
-    return () => clearInterval(serverInterval);
-  }, [obtenerSLA]);
+    fetchSLA();
+    const interval = setInterval(fetchSLA, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchSLA]);
 
-  // --- Countdown + barra animada ---
+  return { stageSla, loading };
+};
 
-  
+/* ============================
+   MAIN COMPONENT
+============================ */
+const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
+  const { stageSla, loading } = useSLA(objectId, runServerlessFunction);
+
+  if (loading) return <Text>Loading SLA…</Text>;
+  if (!stageSla || stageSla.noSla)
+    return <Text>No existe SLA asignado</Text>;
+
+  return (
+    <Flex direction="column" gap="sm">
+      <Heading>{stageSla.stageName}</Heading>
+      <Countdown endDate={stageSla.fechaFinal} />
+    </Flex>
+  );
+};
+
+/* ============================
+   COUNTDOWN GENÉRICO
+============================ */
+const Countdown = ({ endDate }: { endDate: number }) => {
+  const [remaining, setRemaining] = useState(
+    Math.max(0, endDate - Date.now())
+  );
+
   useEffect(() => {
-    if (!fechaFinal) return;
+    let raf: number;
+
+    const tick = () => {
+      const r = Math.max(0, endDate - Date.now());
+      setRemaining(r);
+      if (r > 0) raf = requestAnimationFrame(tick);
+    };
+
     tick();
-  }, [fechaFinal]);
+    return () => cancelAnimationFrame(raf);
+  }, [endDate]);
 
-  if (timeRemaining === null) return <Text>Loading SLA...</Text>;
+  const hours = remaining / (1000 * 60 * 60);
 
-  const hoursRemaining = timeRemaining / (1000 * 60 * 60);
   const estado =
-    hoursRemaining > 8
-      ? "success"
-      : hoursRemaining > 0 && hoursRemaining <= 1
-      ? "warning"
-      : "danger";
+    hours > 8 ? "success" : hours > 0 ? "warning" : "danger";
 
-  const estadoTexto =
-    hoursRemaining > 8
-      ? "A tiempo"
-      : hoursRemaining > 0 && hoursRemaining <= 1
-      ? "En Riesgo"
-      : "Retrasado";
+  const texto =
+    hours > 8 ? "A tiempo" : hours > 0 ? "En riesgo" : "Retrasado";
 
-  // --- Formatear tiempo restante HH:MM:SS ---
   const formatTime = (ms: number) => {
-    const totalSec = Math.floor(ms / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
     return `${h}h ${m}m ${s}s`;
   };
 
   return (
-    <Flex direction="column" gap="md">
-     
-
-      <Flex align="center" gap="medium">
-        <Text variant="bodytext">Tiempo restante:</Text>
-
-        <Heading >
-      {timeRemaining > 0 ? formatTime(timeRemaining) : "Plazo vencido"}
-  
-      </Heading>
-    <Heading>
-    <StatusTag variant={estado}>{estadoTexto}</StatusTag>
-    </Heading>
-
-       
-      </Flex>
+    <Flex align="center" gap="md">
+      <Text>
+        {remaining > 0 ? formatTime(remaining) : "Plazo vencido"}
+      </Text>
+      <StatusTag variant={estado}>{texto}</StatusTag>
     </Flex>
   );
 };

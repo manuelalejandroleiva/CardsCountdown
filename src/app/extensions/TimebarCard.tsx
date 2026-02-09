@@ -122,7 +122,7 @@ const TimebarCard = ({ runServerlessFunction, objectId }: any) => {
 
   return (
     <Flex direction="column" gap="sm">
-      <Heading>{stageSla.stageName}</Heading>
+      
       <Countdown endDate={stageSla.fechaFinal} />
     </Flex>
   );
@@ -135,16 +135,14 @@ const Countdown = ({ endDate }: { endDate: number }) => {
   const [remaining, setRemaining] = useState(
     Math.max(0, endDate - Date.now())
   );
+  let raf: number;
+  const tick = () => {
+    const r = Math.max(0, endDate - Date.now());
+    setRemaining(r);
+    if (r > 0) raf = requestAnimationFrame(tick);
+  };
 
   useEffect(() => {
-    let raf: number;
-
-    const tick = () => {
-      const r = Math.max(0, endDate - Date.now());
-      setRemaining(r);
-      if (r > 0) raf = requestAnimationFrame(tick);
-    };
-
     tick();
     return () => cancelAnimationFrame(raf);
   }, [endDate]);
